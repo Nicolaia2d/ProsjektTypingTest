@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Autokorrektur skrive-test (MVP)</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #111111;
+      --muted: #666666;
+      --accent: #0a7cff;
+      --accent-2: #0bc27f;
+      --danger: #d23b3b;
+      --border: #dadada;
+      --surface: #f6f7f9;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sysfont: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    [data-theme="dark"] {
+      --bg: #0f1115;
+      --fg: #e6e6e6;
+      --muted: #a0a0a0;
+      --accent: #61a7ff;
+      --accent-2: #2cd394;
+      --danger: #ff5c5c;
+      --border: #2a2e37;
+      --surface: #171a20;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--sysfont);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.5;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px 16px 96px; /* bottom space for sticky bar */
+    }
+    header {
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      padding: 12px 16px 8px;
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    .muted { color: var(--muted); font-size: 13px; }
+
+    fieldset { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 16px 0; }
+    legend { padding: 0 8px; color: var(--muted); }
+
+    label { display: block; margin: 8px 0 4px; }
+    input[type="text"], select, textarea {
+      width: 100%;
+      font-size: 16px; /* prevents iOS zoom */
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--fg);
+      box-sizing: border-box;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .mono { font-family: var(--mono); white-space: pre-wrap; word-wrap: break-word; }
+
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 720px) {
+      .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+      .row-2 { grid-template-columns: 1fr 1fr; }
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 16px; /* large hit area */
+      font-size: 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg);
+      cursor: pointer;
+      user-select: none;
+      text-decoration: none;
+    }
+    .btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+    .btn.success { background: var(--accent-2); color: #082; border-color: transparent; }
+    .btn.danger { background: var(--danger); color: #fff; border-color: transparent; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .stack { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    .target-box {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 12px;
+      font-size: 18px;
+    }
+
+    .kbd-hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    .sticky-export {
+      position: sticky;
+      bottom: 0;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      z-index: 20;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: var(--surface); position: sticky; top: 0; z-index: 5; }
+
+    .hidden { display: none !important; }
+
+    .countdown {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in oklab, var(--bg), #000 20%);
+      backdrop-filter: blur(2px);
+      font-size: 64px;
+      font-weight: 700;
+      z-index: 1000;
+    }
+
+    .summary {
+      font-size: 14px; color: var(--muted); margin: 8px 0 0;
+    }
+
+    .theme-toggle { margin-left: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="stack" style="align-items:center; justify-content:space-between;">
+      <div>
+        <h1>Autokorrektur skrive-test</h1>
+        <div class="muted">Måler sluttresultatet for autokorrektur PÅ vs. AV</div>
+      </div>
+      <button id="themeBtn" class="btn theme-toggle" type="button" aria-pressed="false" title="Bytt tema">Bytt tema</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <form id="metaForm">
+      <fieldset>
+        <legend>1. Metadata</legend>
+        <div class="row row-3">
+          <div>
+            <label for="participant_id">Deltaker-ID</label>
+            <input type="text" id="participant_id" required inputmode="text" autocomplete="off" placeholder="f.eks. P001">
+          </div>
+          <div>
+            <label for="condition">Betingelse</label>
+            <select id="condition" required>
+              <option value="">Velg…</option>
+              <option value="PÅ">PÅ</option>
+              <option value="AV">AV</option>
+            </select>
+          </div>
+          <div>
+            <label for="block">Blokk (1–9)</label>
+            <input type="text" id="block" required pattern="^[1-9]$" placeholder="1..9" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>2. Tekstliste (stimuli)</legend>
+        <label for="stimuli">Lim inn N setninger (én per linje)</label>
+        <textarea id="stimuli" class="mono" placeholder="Skriv én setning per linje…"></textarea>
+        <div class="stack">
+          <button type="button" id="loadBtn" class="btn">Last inn setninger</button>
+          <span id="stimCount" class="muted" aria-live="polite"></span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>3. Start blokk</legend>
+        <div class="stack">
+          <button type="button" id="startBtn" class="btn primary" disabled>Start blokk</button>
+          <label class="stack" style="align-items:center; gap:6px;">
+            <input type="checkbox" id="countdownToggle" checked> Nedtelling 3–2–1 før start
+          </label>
+        </div>
+        <div class="summary">Enter = Neste. Shift+Enter ignoreres. Ingen andre snarveier.</div>
+      </fieldset>
+    </form>
+
+    <section id="testSection" class="hidden" aria-live="polite">
+      <fieldset>
+        <legend>4. Test</legend>
+        <div>
+          <label for="targetBox">Måltekst</label>
+          <div id="targetBox" class="target-box mono" role="status" aria-live="polite"></div>
+        </div>
+        <div style="margin-top:12px;">
+          <label for="typedArea">Skriv her</label>
+          <textarea id="typedArea" rows="3" class="mono" placeholder="Skriv setningen nøyaktig…" aria-describedby="kbdHint"></textarea>
+          <div id="kbdHint" class="kbd-hint">Trykk Enter for «Neste». Shift+Enter ignoreres.</div>
+        </div>
+        <div class="stack" style="margin-top:12px;">
+          <button type="button" id="nextBtn" class="btn success">Neste (Enter)</button>
+          <button type="button" id="skipBtn" class="btn danger">Hopp over</button>
+          <span id="progress" class="muted" style="margin-left:auto;"></span>
+        </div>
+      </fieldset>
+    </section>
+
+    <section id="likertSection" class="hidden">
+      <fieldset>
+        <legend>5. Likert-vurdering (1–5)</legend>
+        <div class="row row-3">
+          <div>
+            <div><strong>Hvor lett var det å skrive?</strong></div>
+            <div class="stack" role="radiogroup" aria-label="lett å skrive">
+              <label><input type="radio" name="likert_ease" value="1"> 1</label>
+              <label><input type="radio" name="likert_ease" value="2"> 2</label>
+              <label><input type="radio" name="likert_ease" value="3"> 3</label>
+              <label><input type="radio" name="likert_ease" value="4"> 4</label>
+              <label><input type="radio" name="likert_ease" value="5"> 5</label>
+            </div>
+          </div>
+          <div>
+            <div><strong>Hvor nøyaktig opplevde du teksten?</strong></div>
+            <div class="stack" role="radiogroup" aria-label="nøyaktighet">
+              <label><input type="radio" name="likert_accuracy" value="1"> 1</label>
+              <label><input type="radio" name="likert_accuracy" value="2"> 2</label>
+              <label><input type="radio" name="likert_accuracy" value="3"> 3</label>
+              <label><input type="radio" name="likert_accuracy" value="4"> 4</label>
+              <label><input type="radio" name="likert_accuracy" value="5"> 5</label>
+            </div>
+          </div>
+          <div>
+            <div><strong>Hvor mentalt krevende var oppgaven?</strong></div>
+            <div class="stack" role="radiogroup" aria-label="mentalt krevende">
+              <label><input type="radio" name="likert_effort" value="1"> 1</label>
+              <label><input type="radio" name="likert_effort" value="2"> 2</label>
+              <label><input type="radio" name="likert_effort" value="3"> 3</label>
+              <label><input type="radio" name="likert_effort" value="4"> 4</label>
+              <label><input type="radio" name="likert_effort" value="5"> 5</label>
+            </div>
+          </div>
+        </div>
+        <div class="stack" style="margin-top:12px;">
+          <button type="button" id="saveLikertBtn" class="btn primary">Lagre vurdering</button>
+        </div>
+      </fieldset>
+    </section>
+
+    <section id="resultsSection" class="hidden">
+      <fieldset>
+        <legend>6. Resultater</legend>
+        <div id="summary" class="summary"></div>
+        <div style="overflow:auto; max-height: 50vh; margin-top:8px;">
+          <table id="resultsTable" aria-describedby="summary">
+            <thead>
+              <tr>
+                <th>index</th>
+                <th>target</th>
+                <th>typed</th>
+                <th>time_ms</th>
+                <th>levenshtein</th>
+                <th>similarity_%</th>
+                <th>char_count</th>
+                <th>wpm_raw</th>
+                <th>wpm_5char</th>
+                <th>errors_est</th>
+                <th>order_index</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </fieldset>
+    </section>
+  </div>
+
+  <div id="exportBar" class="sticky-export hidden" role="region" aria-label="Eksport">
+    <div class="stack">
+      <button type="button" id="downloadCsvBtn" class="btn">Last ned CSV</button>
+      <button type="button" id="copyCsvBtn" class="btn">Kopier CSV</button>
+      <button type="button" id="downloadJsonBtn" class="btn">Last ned JSON</button>
+      <span id="exportStatus" class="muted" aria-live="polite" style="margin-left:auto;"></span>
+    </div>
+  </div>
+
+  <div id="countdown" class="countdown hidden" aria-hidden="true">3</div>
+
+  <script>
+    // ---------- Hjelpefunksjoner ----------
+    function nfc(s) {
+      return (s ?? "").normalize('NFC');
+    }
+
+    // Levenshtein-distanse (innsetting/sletting/erstatning)
+    function levenshtein(a, b) {
+      a = nfc(a);
+      b = nfc(b);
+      const m = a.length, n = b.length;
+      if (m === 0) return n;
+      if (n === 0) return m;
+      // Bruk to rader for minne-effektivitet
+      let prev = new Uint32Array(n + 1);
+      let curr = new Uint32Array(n + 1);
+      for (let j = 0; j <= n; j++) prev[j] = j;
+      for (let i = 1; i <= m; i++) {
+        curr[0] = i;
+        const ai = a.charCodeAt(i - 1);
+        for (let j = 1; j <= n; j++) {
+          const cost = ai === b.charCodeAt(j - 1) ? 0 : 1;
+          const del = prev[j] + 1;
+          const ins = curr[j - 1] + 1;
+          const sub = prev[j - 1] + cost;
+          curr[j] = del < ins ? (del < sub ? del : sub) : (ins < sub ? ins : sub);
+        }
+        // swap
+        let tmp = prev; prev = curr; curr = tmp;
+      }
+      return prev[n];
+    }
+
+    function round1(x) { return Math.round(x * 10) / 10; }
+
+    function similarityPct(target, typed, dist) {
+      const t = nfc(target), y = nfc(typed);
+      const maxlen = Math.max(t.length, y.length);
+      if (maxlen === 0) return 100.0;
+      const sim = 1 - (dist / maxlen);
+      return Math.round(sim * 1000) / 10; // en desimal
+    }
+
+    function safeWpm(chars, time_ms) {
+      if (!time_ms || time_ms <= 0) return 0;
+      return (chars / 5) / (time_ms / 60000);
+    }
+
+    function csvEscape(value) {
+      const s = String(value ?? "");
+      if (/[",\n]/.test(s)) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    function download(filename, text, type = 'text/plain;charset=utf-8') {
+      const blob = new Blob([text], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        a.remove();
+      }, 0);
+    }
+
+    function median(arr) {
+      if (!arr.length) return 0;
+      const s = [...arr].sort((a,b)=>a-b);
+      const m = Math.floor(s.length/2);
+      return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+    }
+
+    // ---------- Data/modell ----------
+    const state = {
+      meta: { participant_id: '', condition: '', block: '' },
+      stimuli: [],
+      orderIndex: 0,
+      currentIndex: 0,
+      trialStart: 0,
+      trials: [], // hver: {index,target,typed,time_ms,levenshtein,similarity_pct,char_count,wpm_raw,wpm_5char,errors_est,order_index}
+      likert: null
+    };
+
+    // ---------- DOM ----------
+    const participantEl = document.getElementById('participant_id');
+    const conditionEl = document.getElementById('condition');
+    const blockEl = document.getElementById('block');
+    const stimuliEl = document.getElementById('stimuli');
+    const loadBtn = document.getElementById('loadBtn');
+    const stimCount = document.getElementById('stimCount');
+    const startBtn = document.getElementById('startBtn');
+    const countdownToggle = document.getElementById('countdownToggle');
+
+    const testSection = document.getElementById('testSection');
+    const targetBox = document.getElementById('targetBox');
+    const typedArea = document.getElementById('typedArea');
+    const nextBtn = document.getElementById('nextBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const progress = document.getElementById('progress');
+
+    const likertSection = document.getElementById('likertSection');
+    const saveLikertBtn = document.getElementById('saveLikertBtn');
+
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsTable = document.getElementById('resultsTable').querySelector('tbody');
+    const summaryEl = document.getElementById('summary');
+
+    const exportBar = document.getElementById('exportBar');
+    const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+    const copyCsvBtn = document.getElementById('copyCsvBtn');
+    const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+    const exportStatus = document.getElementById('exportStatus');
+
+    const countdownEl = document.getElementById('countdown');
+    const themeBtn = document.getElementById('themeBtn');
+
+    // ---------- Flytfunksjoner (krav) ----------
+    function startBlock() {
+      // Valider metadata
+      const pid = participantEl.value.trim();
+      const cond = conditionEl.value;
+      const blk = blockEl.value.trim();
+      if (!pid || !cond || !/^([1-9])$/.test(blk)) {
+        alert('Fyll ut gyldig deltakernummer, betingelse og blokk (1–9).');
+        return;
+      }
+      if (state.stimuli.length === 0) {
+        alert('Last inn minst én setning i tekstlista.');
+        return;
+      }
+      state.meta = { participant_id: pid, condition: cond, block: blk };
+      state.orderIndex = 0;
+      state.currentIndex = 0;
+      state.trialStart = 0;
+      state.trials = [];
+      state.likert = null;
+
+      // UI
+      document.getElementById('metaForm').classList.add('hidden');
+      testSection.classList.remove('hidden');
+      exportBar.classList.add('hidden');
+      resultsSection.classList.add('hidden');
+      likertSection.classList.add('hidden');
+
+      const go = () => {
+        showCurrentTarget();
+        // Fokus og start timer når felt får fokus
+        setTimeout(() => { typedArea.focus(); }, 50);
+      };
+
+      if (countdownToggle.checked) {
+        runCountdown(3, go);
+      } else {
+        go();
+      }
+    }
+
+    function showCurrentTarget() {
+      const i = state.currentIndex;
+      const total = state.stimuli.length;
+      const target = state.stimuli[i] ?? '';
+      targetBox.textContent = target;
+      typedArea.value = '';
+      progress.textContent = `Setning ${i+1} av ${total}`;
+      // Start tid når setningen vises / felt får fokus
+      state.trialStart = performance.now();
+    }
+
+    function finishTrial(typedValue, wasSkipped = false) {
+      const idx = state.currentIndex;
+      const target = state.stimuli[idx] ?? '';
+      const now = performance.now();
+      const time_ms = Math.round(now - state.trialStart);
+
+      const targetN = nfc(target);
+      const typedN = nfc(typedValue);
+      const dist = levenshtein(targetN, typedN);
+      const similarity_pct = similarityPct(targetN, typedN, dist);
+      const char_count = typedN.length;
+      const wpm_raw = safeWpm(char_count, time_ms);
+      const wpm_5char = safeWpm(Math.max(targetN.length, typedN.length), time_ms);
+      const errors_est = dist;
+
+      state.orderIndex += 1;
+
+      const row = {
+        participant_id: state.meta.participant_id,
+        condition: state.meta.condition,
+        block: state.meta.block,
+        index: idx + 1,
+        target: target,
+        typed: wasSkipped ? '' : typedValue,
+        time_ms,
+        levenshtein: dist,
+        similarity_pct,
+        char_count,
+        wpm_raw,
+        wpm_5char,
+        errors_est,
+        order_index: state.orderIndex
+      };
+      state.trials.push(row);
+    }
+
+    function next() {
+      const typedValue = typedArea.value.replace(/\r\n?|\n/g, ' '); // ikke la linjeskift snike seg inn
+      finishTrial(typedValue, false);
+      state.currentIndex += 1;
+      if (state.currentIndex >= state.stimuli.length) {
+        // Likert
+        testSection.classList.add('hidden');
+        likertSection.classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        showCurrentTarget();
+        typedArea.focus();
+      }
+    }
+
+    function skip() {
+      finishTrial('', true);
+      state.currentIndex += 1;
+      if (state.currentIndex >= state.stimuli.length) {
+        testSection.classList.add('hidden');
+        likertSection.classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        showCurrentTarget();
+        typedArea.focus();
+      }
+    }
+
+    // ---------- Eksport ----------
+    function filenameBase() {
+      const { participant_id, condition, block } = state.meta;
+      const pid = participant_id || 'NA';
+      const cond = condition || 'NA';
+      const blk = block || 'NA';
+      return `eksperiment_${pid}_${cond}_blokk${blk}`;
+    }
+
+    function toCSV() {
+      // Kolonner pr spesifikasjon (merk: errors_est er ikke i CSV, men vises i tabellen)
+      const cols = [
+        'participant_id','condition','block','index','target','typed','time_ms','levenshtein','similarity_pct','char_count','wpm_raw','wpm_5char','order_index'
+      ];
+      const header = cols.join(',');
+      const lines = [header];
+      for (const r of state.trials) {
+        const values = cols.map(k => csvEscape(k === 'similarity_pct' || k.startsWith('wpm') ? round1(r[k]) : r[k]));
+        lines.push(values.join(','));
+      }
+      return lines.join('\n');
+    }
+
+    function toJSON() {
+      // Full blokk med metadata, per-setning-rader og likert
+      const block = {
+        meta: { ...state.meta },
+        trials: state.trials.map(r => ({ ...r, similarity_pct: round1(r.similarity_pct), wpm_raw: round1(r.wpm_raw), wpm_5char: round1(r.wpm_5char) })),
+        likert: state.likert
+      };
+      return JSON.stringify(block, null, 2);
+    }
+
+    // ---------- UI oppdatering ----------
+    function renderResults() {
+      // Tabellrader
+      resultsTable.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (const r of state.trials) {
+        const tr = document.createElement('tr');
+        const cells = [
+          r.index,
+          r.target,
+          r.typed,
+          r.time_ms,
+          r.levenshtein,
+          round1(r.similarity_pct),
+          r.char_count,
+          round1(r.wpm_raw),
+          round1(r.wpm_5char),
+          r.errors_est,
+          r.order_index
+        ];
+        for (const c of cells) {
+          const td = document.createElement('td');
+          td.textContent = String(c);
+          tr.appendChild(td);
+        }
+        frag.appendChild(tr);
+      }
+      resultsTable.appendChild(frag);
+
+      // Oppsummering (nice-to-have)
+      const times = state.trials.map(r => r.time_ms);
+      const sims = state.trials.map(r => r.similarity_pct);
+      const wpms = state.trials.map(r => r.wpm_raw);
+      const avg = (arr) => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : 0;
+      const summary = `Gj.snitt tid: ${Math.round(avg(times))} ms · Median likhet: ${round1(median(sims))}% · Gj.snitt WPM (rå): ${round1(avg(wpms))}`;
+      summaryEl.textContent = summary;
+    }
+
+    // ---------- Hendelser ----------
+    loadBtn.addEventListener('click', () => {
+      const lines = stimuliEl.value.split(/\r\n|\n|\r/g).map(s => s.trim()).filter(s => s.length > 0);
+      state.stimuli = lines;
+      stimCount.textContent = lines.length ? `${lines.length} setning(er) lastet` : 'Ingen setninger';
+      startBtn.disabled = !(participantEl.value.trim() && conditionEl.value && /^([1-9])$/.test(blockEl.value.trim()) && lines.length > 0);
+    });
+
+    for (const el of [participantEl, conditionEl, blockEl]) {
+      el.addEventListener('input', () => {
+        startBtn.disabled = !(participantEl.value.trim() && conditionEl.value && /^([1-9])$/.test(blockEl.value.trim()) && state.stimuli.length > 0);
+      });
+    }
+
+    startBtn.addEventListener('click', startBlock);
+
+    nextBtn.addEventListener('click', next);
+    skipBtn.addEventListener('click', skip);
+
+    // Tastatur: Enter = Neste. Shift+Enter ignoreres. Ingen linjeskift i feltet.
+    typedArea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Ignorer Shift+Enter fullstendig (ingen linjeskift, ingen neste)
+          return;
+        }
+        next();
+      }
+    }, { passive: false });
+
+    // Likert lagring
+    saveLikertBtn.addEventListener('click', () => {
+      const ease = document.querySelector('input[name="likert_ease"]:checked');
+      const acc = document.querySelector('input[name="likert_accuracy"]:checked');
+      const eff = document.querySelector('input[name="likert_effort"]:checked');
+      if (!ease || !acc || !eff) {
+        alert('Vennligst svar på alle tre Likert-spørsmålene (1–5).');
+        return;
+      }
+      state.likert = {
+        likert_ease: Number(ease.value),
+        likert_accuracy: Number(acc.value),
+        likert_effort: Number(eff.value)
+      };
+      likertSection.classList.add('hidden');
+      resultsSection.classList.remove('hidden');
+      exportBar.classList.remove('hidden');
+      renderResults();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    downloadCsvBtn.addEventListener('click', () => {
+      const csv = toCSV();
+      const name = filenameBase() + '.csv';
+      download(name, '\ufeff' + csv, 'text/csv;charset=utf-8'); // BOM for Excel
+      exportStatus.textContent = `Lastet ned ${name}`;
+    });
+
+    copyCsvBtn.addEventListener('click', async () => {
+      const csv = toCSV();
+      try {
+        await navigator.clipboard.writeText(csv);
+        exportStatus.textContent = 'CSV kopiert til utklippstavlen';
+      } catch (e) {
+        // Fallback
+        const ta = document.createElement('textarea');
+        ta.value = csv;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        exportStatus.textContent = 'CSV kopiert (fallback)';
+      }
+    });
+
+    downloadJsonBtn.addEventListener('click', () => {
+      const json = toJSON();
+      const name = filenameBase() + '.json';
+      download(name, json, 'application/json;charset=utf-8');
+      exportStatus.textContent = `Lastet ned ${name}`;
+    });
+
+    // Tema
+    function setTheme(mode) {
+      document.documentElement.setAttribute('data-theme', mode);
+      themeBtn.setAttribute('aria-pressed', String(mode === 'dark'));
+    }
+    themeBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = current === 'light' ? 'dark' : 'light';
+      setTheme(next);
+      try { localStorage.setItem('theme', next); } catch {}
+    });
+    (function initTheme() {
+      const stored = (() => { try { return localStorage.getItem('theme'); } catch { return null; } })();
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setTheme(stored || (prefersDark ? 'dark' : 'light'));
+    })();
+
+    // Nedtelling (nice-to-have)
+    function runCountdown(sec, onEnd) {
+      countdownEl.textContent = String(sec);
+      countdownEl.classList.remove('hidden');
+      countdownEl.setAttribute('aria-hidden', 'false');
+      let n = sec;
+      const tick = () => {
+        n -= 1;
+        if (n <= 0) {
+          countdownEl.classList.add('hidden');
+          countdownEl.setAttribute('aria-hidden', 'true');
+          onEnd();
+        } else {
+          countdownEl.textContent = String(n);
+          setTimeout(tick, 1000);
+        }
+      };
+      setTimeout(tick, 1000);
+    }
+
+    // iOS fokus-hint: sikre fokus etter touch på knapper
+    [nextBtn, skipBtn].forEach(btn => btn.addEventListener('touchend', () => setTimeout(()=>typedArea.focus(), 100)));
+
+    // Eksponér funksjoner i globalt scope (for krav/inspeksjon)
+    window.levenshtein = levenshtein;
+    window.startBlock = startBlock;
+    window.finishTrial = finishTrial;
+    window.next = next;
+    window.skip = skip;
+    window.toCSV = toCSV;
+    window.toJSON = toJSON;
+  </script>
+</body>
+</html>
