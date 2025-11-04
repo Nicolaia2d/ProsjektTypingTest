@@ -9,5 +9,8 @@ module.exports = merge(common, {
     hot: true,
     open: true,
     static: ['./'],
+    host: '0.0.0.0',
+    port: 8080,
+    allowedHosts: 'all',
   },
 });
